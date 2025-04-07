@@ -1,303 +1,268 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  TouchableOpacity, 
-  Text, 
-  Alert
-} from 'react-native';
+"use client"
+
+import { useState } from "react"
+import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, Alert, Dimensions } from "react-native"
+
+// Obtém a largura da tela para cálculos responsivos
+const { width } = Dimensions.get("window")
+const GRID_SIZE = 3
+const SQUARE_SIZE = width * 0.25
+const SQUARE_MARGIN = 10
+
+// Configurações para cada nível de dificuldade
+const DIFFICULTY_SETTINGS = {
+  easy: { initialLength: 2, flashDuration: 800, pauseDuration: 300, name: "Fácil" },
+  medium: { initialLength: 3, flashDuration: 600, pauseDuration: 250, name: "Médio" },
+  hard: { initialLength: 4, flashDuration: 400, pauseDuration: 200, name: "Difícil" },
+}
+
+// Cores para os quadrados
+const COLORS = ["#FF5252", "#4CAF50", "#2196F3", "#FFEB3B", "#9C27B0", "#FF9800", "#00BCD4", "#795548", "#607D8B"]
 
 export default function App() {
-  // Game state
-  const [sequence, setSequence] = useState([]);
-  const [playerSequence, setPlayerSequence] = useState([]);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isShowingSequence, setIsShowingSequence] = useState(false);
-  const [level, setLevel] = useState(0);
-  const [difficulty, setDifficulty] = useState('easy'); // 'easy', 'medium', 'hard'
-  const [flashingColor, setFlashingColor] = useState(null);
-  
-  // Colors for our game
-  const colors = ['green', 'red', 'blue', 'yellow', 'purple', 'orange', 'pink', 'teal', 'lime'];
-  
-  // Get settings based on difficulty
-  const getSettings = () => {
-    switch(difficulty) {
-      case 'medium':
-        return { speed: 600, colors: 9 };
-      case 'hard':
-        return { speed: 400, colors: 9, reverse: true };
-      default: // easy
-        return { speed: 800, colors: 6 };
-    }
-  };
-  
-  // Start a new game
+  // Estados do jogo
+  const [difficulty, setDifficulty] = useState("easy")
+  const [gameStarted, setGameStarted] = useState(false)
+  const [sequence, setSequence] = useState([])
+  const [playerSequence, setPlayerSequence] = useState([])
+  const [activeSquare, setActiveSquare] = useState(null)
+  const [isShowingSequence, setIsShowingSequence] = useState(false)
+  const [score, setScore] = useState(0)
+  const [highScore, setHighScore] = useState(0)
+
+  // Função para iniciar um novo jogo
   const startGame = () => {
-    setSequence([]);
-    setPlayerSequence([]);
-    setLevel(0);
-    setIsPlaying(true);
-    addToSequence();
-  };
-  
-  // Add a new color to the sequence
-  const addToSequence = () => {
-    const settings = getSettings();
-    const availableColors = colors.slice(0, settings.colors);
-    const randomColor = availableColors[Math.floor(Math.random() * availableColors.length)];
-    
-    const newSequence = [...sequence, randomColor];
-    setSequence(newSequence);
-    setLevel(newSequence.length);
-    
-    // Show the sequence
-    setTimeout(() => showSequence(newSequence), 1000);
-  };
-  
-  // Show the sequence to the player
+    const settings = DIFFICULTY_SETTINGS[difficulty]
+    // Gera a sequência inicial
+    const newSequence = Array(settings.initialLength)
+      .fill()
+      .map(() => Math.floor(Math.random() * 9))
+
+    setSequence(newSequence)
+    setPlayerSequence([])
+    setScore(0)
+    setGameStarted(true)
+
+    // Mostra a sequência após um breve delay
+    setTimeout(() => showSequence(newSequence), 1000)
+  }
+
+  // Função para mostrar a sequência ao jogador
   const showSequence = (sequenceToShow) => {
-    setIsShowingSequence(true);
-    setPlayerSequence([]);
-    
-    const settings = getSettings();
-    
-    // Flash each button in the sequence
-    sequenceToShow.forEach((color, index) => {
-      setTimeout(() => {
-        // Flash the button
-        setFlashingColor(color);
-        
-        // Return to normal after a short time
-        setTimeout(() => {
-          setFlashingColor(null);
-        }, 300);
-        
-        // If this is the last item, allow player to respond
-        if (index === sequenceToShow.length - 1) {
-          setTimeout(() => setIsShowingSequence(false), 500);
-        }
-      }, index * settings.speed);
-    });
-  };
-  
-  // Handle player button press
-  const handlePress = (color) => {
-    if (isShowingSequence || !isPlaying) return;
-    
-    // Flash the button when pressed
-    setFlashingColor(color);
-    setTimeout(() => setFlashingColor(null), 300);
-    
-    const newPlayerSequence = [...playerSequence, color];
-    setPlayerSequence(newPlayerSequence);
-    
-    const settings = getSettings();
-    const expectedSequence = settings.reverse ? [...sequence].reverse() : sequence;
-    
-    // Check if player made a mistake
-    const index = newPlayerSequence.length - 1;
-    if (newPlayerSequence[index] !== expectedSequence[index]) {
-      Alert.alert('Game Over!', `You reached level ${level}`, [
-        { text: 'Play Again', onPress: startGame }
-      ]);
-      setIsPlaying(false);
-      return;
+    setIsShowingSequence(true)
+    const settings = DIFFICULTY_SETTINGS[difficulty]
+    let currentIndex = 0
+
+    // Usamos um intervalo para mostrar cada quadrado na sequência
+    const interval = setInterval(() => {
+      if (currentIndex < sequenceToShow.length) {
+        // Ativa o quadrado atual
+        setActiveSquare(sequenceToShow[currentIndex])
+
+        // Desativa o quadrado após a duração do flash
+        setTimeout(() => setActiveSquare(null), settings.flashDuration)
+        currentIndex++
+      } else {
+        // Terminou de mostrar a sequência
+        clearInterval(interval)
+        setTimeout(() => setIsShowingSequence(false), settings.pauseDuration)
+      }
+    }, settings.flashDuration + settings.pauseDuration)
+  }
+
+  // Função para lidar com o toque do jogador em um quadrado
+  const handleSquarePress = (index) => {
+    // Ignora toques durante a exibição da sequência ou se o jogo não começou
+    if (isShowingSequence || !gameStarted) return
+
+    // Ativa o quadrado
+    setActiveSquare(index)
+
+    // Adiciona à sequência do jogador
+    const newPlayerSequence = [...playerSequence, index]
+    setPlayerSequence(newPlayerSequence)
+
+    // Verifica se o jogador acertou o quadrado atual
+    const currentStep = playerSequence.length
+
+    // Desativa o quadrado após um curto período
+    setTimeout(() => {
+      setActiveSquare(null)
+
+      if (index !== sequence[currentStep]) {
+        // Jogador errou
+        Alert.alert("Ops!", `Você errou a sequência! Sua pontuação foi: ${score}`, [
+          { text: "Tentar Novamente", onPress: startGame },
+        ])
+        return
+      }
+
+      // Verifica se o jogador completou a sequência atual
+      if (newPlayerSequence.length === sequence.length) {
+        const newScore = score + 1
+        setScore(newScore)
+
+        // Atualiza o recorde se necessário
+        if (newScore > highScore) setHighScore(newScore)
+
+        // Adiciona um novo passo à sequência
+        const newSequence = [...sequence, Math.floor(Math.random() * 9)]
+        setSequence(newSequence)
+        setPlayerSequence([])
+
+        // Mostra a nova sequência após uma pausa
+        setTimeout(() => showSequence(newSequence), 1000)
+      }
+    }, 300)
+  }
+
+  // Renderiza a grade de quadrados
+  const renderGrid = () => {
+    const grid = []
+    for (let row = 0; row < GRID_SIZE; row++) {
+      const rowSquares = []
+      for (let col = 0; col < GRID_SIZE; col++) {
+        const index = row * GRID_SIZE + col
+        rowSquares.push(
+          <TouchableOpacity
+            key={index}
+            style={[styles.square, { backgroundColor: COLORS[index] }, activeSquare === index && styles.activeSquare]}
+            onPress={() => handleSquarePress(index)}
+            disabled={isShowingSequence}
+            activeOpacity={0.8}
+          />,
+        )
+      }
+      grid.push(
+        <View key={row} style={styles.row}>
+          {rowSquares}
+        </View>,
+      )
     }
-    
-    // Check if player completed the sequence
-    if (newPlayerSequence.length === expectedSequence.length) {
-      setTimeout(() => addToSequence(), 1000);
-    }
-  };
-  
-  // Change difficulty
-  const changeDifficulty = (newDifficulty) => {
-    setDifficulty(newDifficulty);
-    if (isPlaying) {
-      Alert.alert('Difficulty Changed', 'Starting a new game with new difficulty');
-      setTimeout(startGame, 1000);
-    }
-  };
+    return grid
+  }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Genius Game</Text>
-      <Text style={styles.info}>Level: {level} | Difficulty: {difficulty}</Text>
-      
-      <View style={styles.gameContainer}>
-        {/* First row */}
-        <View style={styles.row}>
-          {colors.slice(0, 3).map(color => (
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.title}>Jogo Gênios</Text>
+
+      {/* Botões de dificuldade */}
+      <View style={styles.difficultyContainer}>
+        <Text style={styles.difficultyTitle}>Dificuldade:</Text>
+        <View style={styles.buttonRow}>
+          {Object.keys(DIFFICULTY_SETTINGS).map((level) => (
             <TouchableOpacity
-              key={color}
-              style={[
-                styles.button, 
-                styles[color],
-                flashingColor === color && styles.flashingButton
-              ]}
-              onPress={() => handlePress(color)}
-              disabled={isShowingSequence || !isPlaying}
-            />
-          ))}
-        </View>
-        
-        {/* Second row */}
-        <View style={styles.row}>
-          {colors.slice(3, 6).map(color => (
-            <TouchableOpacity
-              key={color}
-              style={[
-                styles.button, 
-                styles[color],
-                flashingColor === color && styles.flashingButton
-              ]}
-              onPress={() => handlePress(color)}
-              disabled={isShowingSequence || !isPlaying}
-            />
-          ))}
-        </View>
-        
-        {/* Third row */}
-        <View style={styles.row}>
-          {colors.slice(6, 9).map(color => (
-            <TouchableOpacity
-              key={color}
-              style={[
-                styles.button, 
-                styles[color],
-                flashingColor === color && styles.flashingButton
-              ]}
-              onPress={() => handlePress(color)}
-              disabled={isShowingSequence || !isPlaying}
-            />
+              key={level}
+              style={[styles.difficultyButton, difficulty === level && styles.selectedDifficulty]}
+              onPress={() => setDifficulty(level)}
+              disabled={gameStarted}
+            >
+              <Text style={styles.difficultyText}>{DIFFICULTY_SETTINGS[level].name}</Text>
+            </TouchableOpacity>
           ))}
         </View>
       </View>
-      
-      {/* Game controls */}
-      <View style={styles.controls}>
-        <TouchableOpacity style={styles.startButton} onPress={startGame}>
-          <Text style={styles.buttonText}>Start Game</Text>
-        </TouchableOpacity>
-        
-        <View style={styles.difficultyButtons}>
-          <TouchableOpacity 
-            style={[styles.diffButton, styles.easyButton, difficulty === 'easy' && styles.selectedButton]} 
-            onPress={() => changeDifficulty('easy')}
-          >
-            <Text style={styles.diffButtonText}>Easy</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.diffButton, styles.mediumButton, difficulty === 'medium' && styles.selectedButton]} 
-            onPress={() => changeDifficulty('medium')}
-          >
-            <Text style={styles.diffButtonText}>Medium</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.diffButton, styles.hardButton, difficulty === 'hard' && styles.selectedButton]} 
-            onPress={() => changeDifficulty('hard')}
-          >
-            <Text style={styles.diffButtonText}>Hard</Text>
-          </TouchableOpacity>
-        </View>
+
+      {/* Pontuação */}
+      <View style={styles.scoreContainer}>
+        <Text style={styles.scoreText}>Pontuação: {score}</Text>
+        <Text style={styles.scoreText}>Recorde: {highScore}</Text>
       </View>
-      
-      {isShowingSequence && <Text style={styles.message}>Watch the sequence...</Text>}
-      {isPlaying && !isShowingSequence && (
-        <Text style={styles.message}>
-          {getSettings().reverse ? 'Repeat in REVERSE order' : 'Repeat the sequence'}
-        </Text>
-      )}
-    </View>
-  );
+
+      {/* Grade de jogo */}
+      <View style={styles.gridContainer}>{renderGrid()}</View>
+
+      {/* Botão de iniciar/reiniciar */}
+      <TouchableOpacity
+        style={[styles.startButton, gameStarted && styles.resetButton]}
+        onPress={gameStarted ? () => setGameStarted(false) : startGame}
+      >
+        <Text style={styles.startButtonText}>{gameStarted ? "Reiniciar" : "Iniciar Jogo"}</Text>
+      </TouchableOpacity>
+    </SafeAreaView>
+  )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#121212",
+    alignItems: "center",
+    justifyContent: "center",
     padding: 20,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  info: {
-    fontSize: 16,
+    fontSize: 32,
+    fontWeight: "bold",
+    color: "#FFFFFF",
     marginBottom: 20,
   },
-  gameContainer: {
+  gridContainer: {
     marginVertical: 20,
   },
   row: {
-    flexDirection: 'row',
+    flexDirection: "row",
   },
-  button: {
-    width: 70,
-    height: 70,
-    margin: 5,
+  square: {
+    width: SQUARE_SIZE,
+    height: SQUARE_SIZE,
+    margin: SQUARE_MARGIN,
     borderRadius: 8,
+    opacity: 0.7,
   },
-  flashingButton: {
-    opacity: 0.5,
+  activeSquare: {
+    opacity: 1,
+    transform: [{ scale: 1.1 }],
   },
-  // Button colors
-  green: { backgroundColor: '#00c853' },
-  red: { backgroundColor: '#ff1744' },
-  blue: { backgroundColor: '#2979ff' },
-  yellow: { backgroundColor: '#ffea00' },
-  purple: { backgroundColor: '#aa00ff' },
-  orange: { backgroundColor: '#ff6d00' },
-  pink: { backgroundColor: '#f50057' },
-  teal: { backgroundColor: '#00bfa5' },
-  lime: { backgroundColor: '#c6ff00' },
-  controls: {
-    alignItems: 'center',
+  difficultyContainer: {
+    marginBottom: 20,
+    alignItems: "center",
   },
-  startButton: {
-    backgroundColor: '#333',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginBottom: 15,
+  difficultyTitle: {
+    fontSize: 18,
+    color: "#FFFFFF",
+    marginBottom: 10,
   },
-  buttonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+  buttonRow: {
+    flexDirection: "row",
   },
-  difficultyButtons: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  diffButton: {
-    paddingHorizontal: 15,
+  difficultyButton: {
     paddingVertical: 8,
-    borderRadius: 5,
+    paddingHorizontal: 16,
+    backgroundColor: "#333333",
+    borderRadius: 20,
     marginHorizontal: 5,
   },
-  easyButton: { backgroundColor: '#4caf50' },
-  mediumButton: { backgroundColor: '#ff9800' },
-  hardButton: { backgroundColor: '#f44336' },
-  selectedButton: {
-    borderWidth: 2,
-    borderColor: '#000',
+  selectedDifficulty: {
+    backgroundColor: "#4CAF50",
   },
-  diffButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
+  difficultyText: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
   },
-  message: {
-    fontSize: 16,
-    marginTop: 15,
-    fontStyle: 'italic',
+  startButton: {
+    backgroundColor: "#4CAF50",
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 25,
+    marginTop: 20,
   },
-});
-
-console.log('Minimal Genius Game is ready to run!');
+  resetButton: {
+    backgroundColor: "#F44336",
+  },
+  startButtonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  scoreContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    paddingHorizontal: 20,
+  },
+  scoreText: {
+    fontSize: 18,
+    color: "#FFFFFF",
+  },
+})
